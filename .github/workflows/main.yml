@@ -1,0 +1,63 @@
+name: Build REAL MAFIA from ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find project ZIP
+        id: zip
+        run: |
+          ZIP=$(find . -maxdepth 3 -type f -iname '*.zip' ! -path './.git/*' | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "No project ZIP found."
+            exit 1
+          fi
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Extract project ZIP
+        run: |
+          mkdir -p _real_mafia
+          unzip -q "${{ steps.zip.outputs.zip }}" -d _real_mafia
+          ROOT="_real_mafia"
+          COUNT=$(find _real_mafia -mindepth 1 -maxdepth 1 | wc -l)
+          if [ "$COUNT" = "1" ]; then
+            POSSIBLE=$(find _real_mafia -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            if [ -n "$POSSIBLE" ]; then ROOT="$POSSIBLE"; fi
+          fi
+          echo "ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.13"
+
+      - name: Build APK
+        working-directory: ${{ env.ROOT }}
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-mafia-debug-apk
+          path: ${{ env.ROOT }}/app/build/outputs/apk/debug/app-debug.apk
